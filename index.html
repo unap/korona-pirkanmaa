@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Pirkanmaalla todetut tartunnat</title>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"
+      integrity="sha512-d9xgZrVZpmmQlfonhQUvTR7lMPtO7NkZMkA0ABN3PHCbKA5nqylQ/yWlFAyY6hYgdF1Qh6nYiuADWwKB4C2WSw=="
+      crossorigin="anonymous"
+    ></script>
+    <style>
+      body {
+        font-family: sans-serif;
+        font-size: 14px;
+      }
+      #container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      canvas {
+        width: 0;
+        -moz-user-select: none;
+        -webkit-user-select: none;
+        -ms-user-select: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="container" style="position: relative; height: 75vh; width: 100%">
+      <canvas id="canvas"></canvas>
+      <span id="loadingIndicator">Ladataan...</span>
+    </div>
+    <div>
+      <p>
+        Graafissa on kaikki Pirkanmaalla todetut positiiviset testitulokset, jotka Taysin infektioyksikölle on
+        raportoitu edelliseltä päivältä ilmoituspäivän aamuun mennessä (Fimlab ja yksityiset laboratoriot). Luvut
+        julkaistaan päivittäin pääsääntöisesti kello 10.30 mennessä.
+      </p>
+      <p>
+        Laboratoriotestillä todetut tartunnat ovat vain osa todellisesta tartuntamäärästä. Tiedot toimitetaan viiveellä
+        tartuntatautirekisteriin, jonka perusteella THL tiedottaa koko maan tuloksista. THL:n ilmoittamissa Pirkanmaan
+        luvuissa on myös sellaisten henkilöiden tuloksia, jotka on testattu muualla mutta joiden kotipaikka on
+        pirkanmaalaisessa kunnassa.
+      </p>
+      <p>
+        Lähde:
+        <a href="https://www.tays.fi/fi-fi/sairaanhoitopiiri/Koronavirus_COVID19/Koronavirus_lukuina"
+          >https://www.tays.fi/fi-fi/sairaanhoitopiiri/Koronavirus_COVID19/Koronavirus_lukuina</a
+        >
+      </p>
+    </div>
+
+    <script>
+      async function getData() {
+        const resp = await fetch('.netlify/functions/daily-counts');
+        return resp.json();
+      }
+
+      function rollingAverage(data, n) {
+        let result = [data[0]];
+        for (let i = 1; i < data.length; i++) {
+          const points = data.slice(Math.max(i - n + 1, 0), i + 1);
+          const avg = points.reduce((a, b) => a + b, 0) / points.length;
+          result.push(avg);
+        }
+        return result;
+      }
+
+      window.onload = async function () {
+        const loader = document.getElementById('loadingIndicator');
+        try {
+          const data = await getData();
+          loader.parentNode.removeChild(loader);
+          var red = 'rgb(255, 99, 132)';
+          var blue = 'rgb(54, 162, 235)';
+          var chartData = {
+            labels: data.map((dp) => dp.date),
+            datasets: [
+              {
+                type: 'line',
+                label: '10 päivän k.a.',
+                borderColor: blue,
+                backgroundColor: 'transparent',
+                borderWidth: 3,
+                data: rollingAverage(
+                  data.map((dp) => dp.count),
+                  10,
+                ),
+                pointRadius: 0,
+              },
+              {
+                type: 'bar',
+                label: 'Positiiviset testitulokset',
+                backgroundColor: red,
+                borderColor: red,
+                borderWidth: 1,
+                data: data.map((dp) => dp.count),
+              },
+            ],
+          };
+
+          var ctx = document.getElementById('canvas').getContext('2d');
+          window.myBar = new Chart(ctx, {
+            type: 'bar',
+            data: chartData,
+            options: {
+              responsive: true,
+              legend: {
+                position: 'top',
+              },
+              title: {
+                display: true,
+                text: 'Pirkanmaalla todetut tartunnat',
+              },
+              tooltips: {
+                callbacks: {
+                  label: function (tooltipItem, data) {
+                    var label = data.datasets[tooltipItem.datasetIndex].label || '';
+
+                    if (label) {
+                      label += ': ';
+                    }
+                    label += Math.round(tooltipItem.yLabel);
+                    return label;
+                  },
+                },
+              },
+            },
+          });
+        } catch (error) {
+          loader.innerText = 'Lataus epäonnistui';
+        }
+      };
+    </script>
+  </body>
+</html>
